@@ -7,6 +7,7 @@ import requests
 import re
 import os
 import pickle
+from threading import Thread
 import time
 
 MIN_ID                = 1
@@ -134,7 +135,31 @@ if os.path.isfile(SAVED_DATA_FILE):
 else:
     dam_data = {}
 
+def SaveToDisk(data):
+  pickle.dump(data, open(SAVED_DATA_FILE, "wb" ) )
+
+  def MergeDictionaries(dicts):
+      super_dict = {}
+      for d in dicts:
+          for k, v in d.items():
+              super_dict[k] = v
+      return super_dict
+
+  def Flatten(list_of_lists):
+    return [item for sublist in list_of_lists for item in sublist]  
+
+  with open(HUMAN_OUTPUT, 'w', newline='') as csvfile:
+      fieldnames = Flatten([list(x.keys()) for x in data[list(data.keys())[0]].values()])
+      writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+      writer.writeheader()
+      for dam_id, this_dams_data in data.items():
+          merged_dicts = MergeDictionaries([v for k,v in this_dams_data.items()])
+          writer.writerow(merged_dicts)
+
+
+
 for dam_id in range(1,MAX_ID+1):
+    print("Fetching dam {0}...".format(dam_id))
     if dam_id not in dam_data:
         dam_data[dam_id] = {}
     for x in dam_data_template:
@@ -147,25 +172,12 @@ for dam_id in range(1,MAX_ID+1):
             dam_data[dam_id][x['name']] = vals
         except ImportError as e:
             pass
-
-pickle.dump(dam_data, open(SAVED_DATA_FILE, "wb" ) )
-
-def MergeDictionaries(dicts):
-    super_dict = {}
-    for d in dicts:
-        for k, v in d.items():
-            super_dict[k] = v
-    return super_dict
-
-flatten = lambda l: [item for sublist in l for item in sublist]
-
-with open(HUMAN_OUTPUT, 'w', newline='') as csvfile:
-    fieldnames = flatten([list(x.keys()) for x in dam_data[list(dam_data.keys())[0]].values()])
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
-    for dam_id, this_dams_data in dam_data.items():
-        merged_dicts = MergeDictionaries([v for k,v in this_dams_data.items()])
-        writer.writerow(merged_dicts)
+    #Save to disk after each successful capture
+    #Threads cannot be interrupted, so the following makes the save robust
+    #against user-initiated interrupts
+    a = Thread(target=SaveToDisk, args=(dam_data,))
+    a.start()
+    a.join()
 
 # page = requests.get(ARCHIVOS_ESCUR.format(id=1))
 # assert page.status_code==200
