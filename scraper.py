@@ -13,9 +13,9 @@ import time
 MIN_ID                = 1
 MAX_ID                = 6225
 CRAWL_DELAY           = 0.1
-SAVED_DATA_FILE       = 'saved_dams.pickle'
-HUMAN_OUTPUT          = 'dam_readable.csv'
-SAVE_FILES_TO         = '/z/attachments'
+SAVED_DATA_FILE       = '/Users/Kelsey/Desktop/Berkeley/projects/mexico_gustavo/dam_scraper/saved_dams.pickle'
+HUMAN_OUTPUT          = '/Users/Kelsey/Desktop/Berkeley/projects/mexico_gustavo/dam_scraper/dam_readable.csv'
+SAVE_FILES_TO         = '/Users/Kelsey/Desktop/Berkeley/projects/mexico_gustavo/dam_scraper/attachments'
 GENERAL_URL           = 'https://presas.conagua.gob.mx/inventario/tgeneralidades.aspx?DSP,{id}'
 UBICACION_URL         = 'https://presas.conagua.gob.mx/inventario/tubicacion.aspx?DSP,{id}'
 PROPOSITOS_URL        = 'https://presas.conagua.gob.mx/inventario/tpropositoobra.aspx?DSP,{id}'
@@ -23,6 +23,8 @@ USO_AGUA_URL          = 'https://presas.conagua.gob.mx/inventario/tuso_agua_disp
 CUENCA_ESCUR_URL      = 'https://presas.conagua.gob.mx/inventario/tcuenca.aspx?DSP,{id}'
 ARCHIVOS_ESCUR_URL    = 'https://presas.conagua.gob.mx/inventario/archivos_presa.aspx?{id}'
 CAUCE_AGUAS_ABAJO_URL = 'https://presas.conagua.gob.mx/inventario/tcauce_aguas_abajo.aspx?DSP,{id}'
+
+os.makedirs(SAVE_FILES_TO)
 
 general_table = [
   ("numero_id",           "span_NOMBRE_PRESA_ID"),
