@@ -13,9 +13,9 @@ import time
 MIN_ID                = 1
 MAX_ID                = 6225
 CRAWL_DELAY           = 0.1
-SAVED_DATA_FILE       = '/Users/Kelsey/Desktop/Berkeley/projects/mexico_gustavo/dam_scraper/saved_dams.pickle'
-HUMAN_OUTPUT          = '/Users/Kelsey/Desktop/dam_readable.csv'
-SAVE_FILES_TO         = '/Users/Kelsey/Desktop/Berkeley/projects/mexico_gustavo/dam_scraper/attachments'
+SAVED_DATA_FILE       = 'saved_dams.pickle'
+HUMAN_OUTPUT          = 'dam_readable.csv'
+SAVE_FILES_TO         = '/z/attachments'
 GENERAL_URL           = 'https://presas.conagua.gob.mx/inventario/tgeneralidades.aspx?DSP,{id}'
 UBICACION_URL         = 'https://presas.conagua.gob.mx/inventario/tubicacion.aspx?DSP,{id}'
 PROPOSITOS_URL        = 'https://presas.conagua.gob.mx/inventario/tpropositoobra.aspx?DSP,{id}'
@@ -98,6 +98,7 @@ dam_data_template = [
     {"name": "archive", "url": ARCHIVOS_ESCUR_URL, "table": None}
 ]
 
+#Ensure there are no duplicate column headers in the CSV
 table_entries = []
 for x in dam_data_template:
     if x['table'] is None:
@@ -130,10 +131,6 @@ def GetDataFromPage(url,table,dam_id):
     return ret
 
 
-if os.path.isfile(SAVED_DATA_FILE):
-    dam_data = pickle.load( open(SAVED_DATA_FILE, "rb" ) )
-else:
-    dam_data = {}
 
 def SaveToDisk(data):
   pickle.dump(data, open(SAVED_DATA_FILE, "wb" ) )
@@ -153,39 +150,87 @@ def SaveToDisk(data):
       writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
       writer.writeheader()
       for dam_id, this_dams_data in data.items():
-          merged_dicts = MergeDictionaries([v for k,v in this_dams_data.items()])
+          merged_dicts = MergeDictionaries([v for k,v in this_dams_data.items() if k!='archivos'])
           writer.writerow(merged_dicts)
 
 
 
-for dam_id in range(1,MAX_ID+1):
-    print("Fetching dam {0}...".format(dam_id))
-    if dam_id not in dam_data:
-        dam_data[dam_id] = {}
-    for x in dam_data_template:
-        if x['name'] in dam_data[dam_id]:
-            continue
-        if x['table'] is None:
-            continue
-        try:
-            vals = GetDataFromPage(x['url'], x['table'], dam_id)
-            dam_data[dam_id][x['name']] = vals
-        except ImportError as e:
-            pass
-    #Save to disk after each successful capture
-    #Threads cannot be interrupted, so the following makes the save robust
-    #against user-initiated interrupts
-    a = Thread(target=SaveToDisk, args=(dam_data,))
-    a.start()
-    a.join()
+def CollectInfo():
+  if os.path.isfile(SAVED_DATA_FILE):
+      dam_data = pickle.load( open(SAVED_DATA_FILE, "rb" ) )
+  else:
+      dam_data = {}
 
-# page = requests.get(ARCHIVOS_ESCUR.format(id=1))
-# assert page.status_code==200
-# files=list(set(re.findall(r'/sisp_v2/img/ADJUNTOS/Ags/[^"]+\.(?:pdf|jpg)',page.text)))
-# for filename in files:
-#   download_link   = "https://presas.conagua.gob.mx"+filename
-#   base_name       = os.path.basename(filename)
-#   downloaded_file = requests.get(download_link).content
-#   open(os.path.join(SAVE_FILES_TO,base_name), 'wb').write(downloaded_file)
+  for dam_id in range(1,MAX_ID+1):
+      print("Fetching dam {0}...".format(dam_id))
+      if dam_id not in dam_data:
+          dam_data[dam_id] = {}
+      for x in dam_data_template:
+          if x['name'] in dam_data[dam_id]:
+              continue
+          if x['table'] is None:
+              continue
+          try:
+              vals = GetDataFromPage(x['url'], x['table'], dam_id)
+              dam_data[dam_id][x['name']] = vals
+          except ImportError as e:
+              pass
+      #Save to disk after each successful capture
+      #Threads cannot be interrupted, so the following makes the save robust
+      #against user-initiated interrupts
+      a = Thread(target=SaveToDisk, args=(dam_data,)); a.start(); a.join()
 
 
+
+def CollectAttachments():
+  if os.path.isfile(SAVED_DATA_FILE):
+      dam_data = pickle.load( open(SAVED_DATA_FILE, "rb" ) )
+  else:
+      dam_data = {}
+
+  for dam_id in range(1,MAX_ID+1):
+    print("Fetching attachments for {0}...".format(dam_id))
+
+    if dam_id not in dam_data:              #Do we have any info on this dam? 
+      dam_data[dam_id] = {}                 #No. So we make a dictionary for the dam
+    if not 'archivos' in dam_data[dam_id]:  #Do we have a dictionary for this dam's files?
+      dam_data[dam_id]['archivos'] = {}     #Make a dictionary for this dam's files
+
+    atable = dam_data[dam_id]['archivos']   #Get a reference to the dam's archives dictionary
+    #If the archives table is empty or contains some false values, then we have work to do
+    if len(atable)>0 and all(v==True for k,v in atable.items()):
+      continue #No work to do: table was not empty and all entries were true
+
+    page = requests.get(ARCHIVOS_ESCUR_URL.format(id=dam_id))
+    assert page.status_code==200
+    files=list(set(re.findall(r'/sisp_v2/img/ADJUNTOS/Ags/[^"]+\.(?:pdf|jpg)',page.text)))
+
+    #This sets up the archives dictionary by making a false entry for each file
+    #we've found. We don't simply set the dictionary `atable = {...}` to avoid
+    #overwriting existing entries, should we run this twice by commenting out
+    #the `if len(atable)>0 ...` line
+    for filename in files:       #Loop through files
+      if not filename in atable: #If the file is not already in the table
+        atable[filename] = False #Make a note that we haven't downloaded the file yet
+
+    if len(files)==0:
+      atable['###NO_FILES_IN_ARCHIVE###'] = True
+
+    #Save progress to disk
+    a = Thread(target=SaveToDisk, args=(dam_data,)); a.start(); a.join()
+
+    for filename in files:
+      print("dam_id={0} - Acquiring file='{1}'".format(dam_id,filename))
+      if atable[filename]: #Has the file already been downloaded?
+        continue
+      download_link   = "https://presas.conagua.gob.mx"+filename
+      base_name       = "{0:0>4}_{1}".format(dam_id,os.path.basename(filename))
+      save_name       = os.path.join(SAVE_FILES_TO,base_name)
+      downloaded_file = requests.get(download_link).content
+      open(save_name, 'wb').write(downloaded_file)
+      atable[filename] = True
+      #Make a note that we've saved the file to disk
+      a = Thread(target=SaveToDisk, args=(dam_data,)); a.start(); a.join()
+
+#CollectInfo()
+CollectAttachments()
